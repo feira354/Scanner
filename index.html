@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Permissions-Policy" content="camera=*">
+<title>QR Scanner - Absensi Pengajian</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --hijau: #1a6b3c;
+  --hijau-gelap: #0f4226;
+  --hijau-muda: #2d9a5a;
+  --hijau-pale: #e8f5ee;
+  --emas: #c9a227;
+  --merah: #dc2626;
+  --abu: #6b7280;
+  --border: #e5e7eb;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background: #0f4226;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: white;
+}
+
+/* HEADER */
+.header {
+  background: rgba(0,0,0,0.3);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.header-icon { font-size: 24px; }
+.header h1 { font-size: 17px; font-weight: 700; }
+.header p { font-size: 11px; opacity: 0.7; }
+
+/* SETUP PANEL */
+.setup-panel {
+  background: rgba(255,255,255,0.08);
+  margin: 12px;
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.setup-panel label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
+  display: block;
+  margin-bottom: 5px;
+}
+
+.setup-panel select,
+.setup-panel input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  margin-bottom: 10px;
+  -webkit-appearance: none;
+}
+
+.setup-panel select option { background: #1a3a2a; color: white; }
+.setup-panel input::placeholder { color: rgba(255,255,255,0.4); }
+
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* SCANNER AREA */
+.scanner-area {
+  flex: 1;
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.video-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 3px solid var(--emas);
+  box-shadow: 0 0 40px rgba(201,162,39,0.3);
+}
+
+#video {
+  width: 100%;
+  display: block;
+  background: #000;
+}
+
+/* QR Frame overlay */
+.qr-frame {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 55%; aspect-ratio: 1;
+  pointer-events: none;
+}
+
+.qr-frame::before, .qr-frame::after,
+.qr-frame span::before, .qr-frame span::after {
+  content: '';
+  position: absolute;
+  width: 22px; height: 22px;
+  border-color: var(--emas);
+  border-style: solid;
+}
+
+.qr-frame::before { top:0; left:0; border-width:3px 0 0 3px; }
+.qr-frame::after  { top:0; right:0; border-width:3px 3px 0 0; }
+.qr-frame span::before { bottom:0; left:0; border-width:0 0 3px 3px; }
+.qr-frame span::after  { bottom:0; right:0; border-width:0 3px 3px 0; }
+
+/* Laser scan line */
+.scan-line {
+  position: absolute;
+  top: 22%; left: 10%;
+  width: 80%; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--emas), transparent);
+  animation: scanAnim 2s ease-in-out infinite;
+}
+
+@keyframes scanAnim {
+  0%, 100% { top: 22%; opacity: 0.8; }
+  50% { top: 72%; opacity: 1; }
+}
+
+/* SCAN STATUS */
+.scan-status {
+  text-align: center;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  transition: all 0.3s;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.scan-status.idle { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+.scan-status.scanning { background: rgba(201,162,39,0.15); color: var(--emas); border: 1px solid rgba(201,162,39,0.3); }
+.scan-status.success { background: rgba(22,163,74,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.scan-status.error   { background: rgba(220,38,38,0.2); color: #fca5a5; border: 1px solid rgba(252,165,165,0.3); }
+.scan-status.duplicate { background: rgba(234,179,8,0.2); color: #fde047; border: 1px solid rgba(253,224,71,0.3); }
+
+/* BUTTONS */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.btn-start { background: var(--emas); color: #1a1a1a; }
+.btn-start:hover { background: #e6b82a; transform: scale(1.02); }
+.btn-stop  { background: var(--merah); color: white; }
+.btn-stop:hover { background: #b91c1c; }
+.btn-manual { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
+
+/* MANUAL INPUT */
+.manual-section {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.manual-section h3 { font-size: 13px; opacity: 0.7; margin-bottom: 10px; }
+
+.manual-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.manual-input-row input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.manual-input-row input::placeholder { color: rgba(255,255,255,0.4); }
+
+.btn-submit {
+  padding: 10px 16px;
+  background: var(--hijau-muda);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* LOG */
+.log-section {
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.log-section h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.log-section h3 button {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.log-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  animation: fadeIn 0.3s ease;
+}
+
+.log-item:last-child { border-bottom: none; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.log-emoji { font-size: 20px; flex-shrink: 0; }
+.log-nama  { font-weight: 600; font-size: 14px; }
+.log-kelas { font-size: 11px; opacity: 0.6; }
+.log-waktu { margin-left: auto; font-size: 11px; opacity: 0.5; flex-shrink: 0; }
+
+.log-empty { text-align: center; opacity: 0.4; font-size: 13px; padding: 10px 0; }
+
+/* COUNT BADGE */
+.count-badge {
+  position: absolute;
+  top: 10px; right: 10px;
+  background: var(--emas);
+  color: #1a1a1a;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* PERMISSION ERROR */
+.permission-error {
+  background: rgba(220,38,38,0.15);
+  border: 1px solid rgba(220,38,38,0.3);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  display: none;
+}
+
+.permission-error h3 { color: #fca5a5; margin-bottom: 8px; }
+.permission-error p { font-size: 13px; opacity: 0.8; line-height: 1.6; }
+.permission-error code {
+  background: rgba(0,0,0,0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* TOAST */
+.toast-container { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 999; width: 90%; max-width: 360px; }
+.toast {
+  background: white; color: #1f2937;
+  border-radius: 10px; padding: 12px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  font-weight: 600; font-size: 14px;
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+  animation: toastIn 0.3s ease;
+  border-left: 4px solid #16a34a;
+}
+.toast.error { border-left-color: var(--merah); }
+@keyframes toastIn { from { transform: translateY(-20px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* CAMERA OPTIONS */
+.cam-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 13px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  margin-bottom: 10px;
+  display: none;
+}
+</style>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-icon">📷</div>
+  <div>
+    <h1>QR Scanner Absensi</h1>
+    <p id="headerDesc">Menghubungkan ke sistem...</p>
+  </div>
+</div>
+
+<!-- SETUP PANEL -->
+<div class="setup-panel">
+  <div class="row">
+    <div>
+      <label>📅 Tanggal</label>
+      <input type="date" id="tanggal">
+    </div>
+    <div>
+      <label>🕐 Sesi</label>
+      <select id="sesiSelect">
+        <option value="">Pilih Sesi...</option>
+      </select>
+    </div>
+  </div>
+  <div id="appsScriptUrlSection">
+    <label>🔗 URL Apps Script (isi sekali)</label>
+    <input type="url" id="appsScriptUrl" placeholder="https://script.google.com/macros/s/.../exec">
+  </div>
+  <button class="btn btn-manual" onclick="saveAndLoad()" style="margin-top:2px">
+    💾 Simpan & Muat Sesi
+  </button>
+</div>
+
+<div class="scanner-area">
+
+  <!-- Permission Error -->
+  <div class="permission-error" id="permissionError">
+    <h3>⚠️ Kamera Tidak Bisa Diakses</h3>
+    <p>Halaman ini perlu diakses lewat <strong>HTTPS</strong> dan browser perlu memberi izin kamera.<br><br>
+    Coba langkah berikut:<br>
+    1. Klik ikon 🔒 di address bar browser<br>
+    2. Pilih <strong>Izin Situs / Site Settings</strong><br>
+    3. Set Kamera ke <strong>Izinkan / Allow</strong><br>
+    4. Refresh halaman ini<br><br>
+    <strong>Pastikan URL dimulai dengan <code>https://</code></strong></p>
+  </div>
+
+  <!-- Scan Status -->
+  <div class="scan-status idle" id="scanStatus">
+    📷 Klik tombol untuk mulai scan
+  </div>
+
+  <!-- Video Preview -->
+  <div class="video-wrapper" id="videoWrapper" style="display:none; position:relative">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="qr-frame"><span></span></div>
+    <div class="scan-line" id="scanLine"></div>
+    <div class="count-badge" id="countBadge">0 scan</div>
+  </div>
+
+  <!-- Camera Select (for multi-camera devices) -->
+  <select class="cam-select" id="cameraSelect" onchange="switchCamera()"></select>
+
+  <!-- Control Buttons -->
+  <div id="startBtn">
+    <button class="btn btn-start" onclick="startScanner()">
+      📷 Mulai Kamera Scanner
+    </button>
+  </div>
+
+  <div id="stopBtn" style="display:none">
+    <button class="btn btn-stop" onclick="stopScanner()">
+      ⏹️ Hentikan Scanner
+    </button>
+  </div>
+
+  <!-- Manual Input -->
+  <div class="manual-section">
+    <h3>⌨️ Input Kode Manual (alternatif)</h3>
+    <div class="manual-input-row">
+      <input type="text" id="manualInput" placeholder="Ketik kode QR / ID santri..." onkeydown="if(event.key==='Enter') submitManual()">
+      <button class="btn-submit" onclick="submitManual()">✓</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-section">
+    <h3>
+      📋 Log Scan Sesi Ini
+      <button onclick="clearLog()">Hapus Log</button>
+    </h3>
+    <div id="logContainer">
+      <div class="log-empty">Belum ada scan</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- jsQR library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  stream: null,
+  scanning: false,
+  log: [],
+  scanCount: 0,
+  cooldown: false,
+  cameras: [],
+  currentCamera: 0,
+  appsScriptUrl: '',
+  sesi: []
+};
+
+const STORAGE_KEY = 'absensi_scanner_config';
+
+// ============================================================
+// INIT
+// ============================================================
+window.onload = function() {
+  // Set today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('tanggal').value = today;
+
+  // Load saved config
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const cfg = JSON.parse(saved);
+      if (cfg.url) {
+        document.getElementById('appsScriptUrl').value = cfg.url;
+        S.appsScriptUrl = cfg.url;
+        loadSesi(cfg.url);
+      }
+    } catch(e) {}
+  }
+
+  // Check HTTPS
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+    document.getElementById('permissionError').style.display = 'block';
+    setStatus('⚠️ Perlu HTTPS untuk akses kamera', 'error');
+  }
+};
+
+async function saveAndLoad() {
+  const url = document.getElementById('appsScriptUrl').value.trim();
+  if (!url) { toast('Isi URL Apps Script terlebih dahulu', 'error'); return; }
+  S.appsScriptUrl = url;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ url }));
+  await loadSesi(url);
+}
+
+async function loadSesi(url) {
+  setStatus('⏳ Memuat data sesi...', 'scanning');
+  try {
+    const res = await callBackend('getSesi', {}, url);
+    S.sesi = res.data || [];
+    const sel = document.getElementById('sesiSelect');
+    sel.innerHTML = '<option value="">Pilih Sesi...</option>' +
+      S.sesi.map(s => `<option value="${s.ID}" data-nama="${s.NamaSesi}">${s.NamaSesi} (${s.Waktu})</option>`).join('');
+    document.getElementById('headerDesc').textContent = `${S.sesi.length} sesi dimuat`;
+    setStatus('✅ Terhubung! Pilih sesi lalu mulai scan', 'idle');
+    toast('Berhasil terhubung ke sistem!');
+  } catch(e) {
+    setStatus('❌ Gagal terhubung ke Apps Script', 'error');
+    toast('Gagal: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
+// BACKEND CALL
+// ============================================================
+async function callBackend(action, params = {}, url = null) {
+  const endpoint = url || S.appsScriptUrl;
+  if (!endpoint) throw new Error('URL Apps Script belum diisi');
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, params }),
+    redirect: 'follow'
+  });
+
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch(e) {
+    throw new Error('Response tidak valid: ' + text.substring(0, 100));
+  }
+}
+
+// ============================================================
+// CAMERA SCANNER
+// ============================================================
+async function startScanner() {
+  const tanggal = document.getElementById('tanggal').value;
+  const sesiId  = document.getElementById('sesiSelect').value;
+
+  if (!tanggal) { toast('Isi tanggal terlebih dahulu', 'error'); return; }
+  if (!sesiId)  { toast('Pilih sesi terlebih dahulu', 'error'); return; }
+  if (!S.appsScriptUrl) { toast('Isi URL Apps Script dan klik Simpan & Muat Sesi', 'error'); return; }
+
+  // Enumerate cameras
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    S.cameras = devices.filter(d => d.kind === 'videoinput');
+
+    if (S.cameras.length > 1) {
+      const sel = document.getElementById('cameraSelect');
+      sel.style.display = 'block';
+      sel.innerHTML = S.cameras.map((c, i) =>
+        `<option value="${i}">${c.label || 'Kamera ' + (i+1)}</option>`
+      ).join('');
+      // Default to back camera
+      const backIdx = S.cameras.findIndex(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('belakang') || c.label.toLowerCase().includes('rear') || c.label.toLowerCase().includes('environment'));
+      if (backIdx >= 0) { sel.value = backIdx; S.currentCamera = backIdx; }
+    }
+
+    await openCamera();
+
+  } catch(e) {
+    document.getElementById('permissionError').style.display = 'block';
+    setStatus('❌ Akses kamera ditolak: ' + e.message, 'error');
+    toast('Izin kamera ditolak. Lihat instruksi di atas.', 'error');
+  }
+}
+
+async function openCamera() {
+  const constraints = S.cameras.length > 0 && S.cameras[S.currentCamera]
+    ? { video: { deviceId: { exact: S.cameras[S.currentCamera].deviceId } } }
+    : { video: { facingMode: { ideal: 'environment' } } };
+
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('video');
+    video.srcObject = S.stream;
+    await video.play();
+
+    document.getElementById('videoWrapper').style.display = 'block';
+    document.getElementById('startBtn').style.display = 'none';
+    document.getElementById('stopBtn').style.display = 'block';
+    document.getElementById('permissionError').style.display = 'none';
+
+    S.scanning = true;
+    S.scanCount = 0;
+    setStatus('🔍 Scanning... Arahkan QR Code ke kamera', 'scanning');
+    requestAnimationFrame(scanLoop);
+
+  } catch(e) {
+    document.getElementById('permissionError').style.display = 'block';
+    setStatus('❌ ' + (e.name === 'NotAllowedError' ? 'Izin kamera ditolak' : e.message), 'error');
+  }
+}
+
+async function switchCamera() {
+  S.currentCamera = parseInt(document.getElementById('cameraSelect').value);
+  if (S.stream) {
+    S.stream.getTracks().forEach(t => t.stop());
+    await openCamera();
+  }
+}
+
+function stopScanner() {
+  S.scanning = false;
+  if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+  document.getElementById('videoWrapper').style.display = 'none';
+  document.getElementById('startBtn').style.display = 'block';
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('cameraSelect').style.display = 'none';
+  setStatus('⏸️ Scanner dihentikan', 'idle');
+}
+
+// ============================================================
+// SCAN LOOP
+// ============================================================
+function scanLoop() {
+  if (!S.scanning) return;
+
+  const video = document.getElementById('video');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: 'dontInvert'
+    });
+
+    if (code && !S.cooldown) {
+      handleScan(code.data);
+    }
+  }
+
+  requestAnimationFrame(scanLoop);
+}
+
+async function handleScan(barcode) {
+  if (S.cooldown) return;
+  S.cooldown = true;
+
+  // Visual feedback
+  document.getElementById('scanLine').style.background = 'linear-gradient(90deg, transparent, #4ade80, transparent)';
+  setStatus('⏳ Memproses: ' + barcode, 'scanning');
+
+  await processBarcode(barcode);
+
+  setTimeout(() => {
+    S.cooldown = false;
+    document.getElementById('scanLine').style.background = '';
+    if (S.scanning) setStatus('🔍 Scanning... Arahkan QR Code ke kamera', 'scanning');
+  }, 2500);
+}
+
+async function processBarcode(barcode) {
+  const tanggal = document.getElementById('tanggal').value;
+  const sesiEl  = document.getElementById('sesiSelect');
+  const sesiId  = sesiEl.value;
+  const namaSesi = sesiEl.options[sesiEl.selectedIndex]?.dataset?.nama || sesiEl.options[sesiEl.selectedIndex]?.text || '';
+
+  if (!sesiId) { setStatus('⚠️ Pilih sesi terlebih dahulu!', 'error'); return; }
+
+  try {
+    const res = await callBackend('absenBarcode', { barcode, tanggal, sesiId, namaSesi });
+
+    if (res.success) {
+      S.scanCount++;
+      document.getElementById('countBadge').textContent = S.scanCount + ' scan';
+      setStatus(`✅ ${res.nama} — ${res.kelas || 'Santri'}`, 'success');
+      addLog({ nama: res.nama, kelas: res.kelas, status: 'success', waktu: now() });
+      toast(`✅ ${res.nama} berhasil diabsen!`);
+    } else if (res.message && res.message.includes('sudah absen')) {
+      setStatus(`⚠️ ${res.nama || barcode} sudah absen di sesi ini`, 'duplicate');
+      addLog({ nama: res.nama || barcode, kelas: '(sudah absen)', status: 'duplicate', waktu: now() });
+    } else {
+      setStatus(`❌ ${res.message || 'QR tidak dikenal'}`, 'error');
+      toast(res.message || 'QR Code tidak valid', 'error');
+    }
+  } catch(e) {
+    setStatus('❌ Error: ' + e.message, 'error');
+    toast('Koneksi error: ' + e.message, 'error');
+  }
+}
+
+async function submitManual() {
+  const val = document.getElementById('manualInput').value.trim();
+  if (!val) return;
+  document.getElementById('manualInput').value = '';
+  await processBarcode(val);
+}
+
+// ============================================================
+// LOG
+// ============================================================
+function addLog(entry) {
+  S.log.unshift(entry);
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('logContainer');
+  if (!S.log.length) { el.innerHTML = '<div class="log-empty">Belum ada scan</div>'; return; }
+
+  el.innerHTML = S.log.slice(0, 30).map(l => `
+    <div class="log-item">
+      <div class="log-emoji">${l.status === 'success' ? '✅' : l.status === 'duplicate' ? '⚠️' : '❌'}</div>
+      <div>
+        <div class="log-nama">${l.nama}</div>
+        <div class="log-kelas">${l.kelas || ''}</div>
+      </div>
+      <div class="log-waktu">${l.waktu}</div>
+    </div>
+  `).join('');
+}
+
+function clearLog() { S.log = []; S.scanCount = 0; document.getElementById('countBadge').textContent = '0 scan'; renderLog(); }
+
+// ============================================================
+// UI HELPERS
+// ============================================================
+function setStatus(msg, type) {
+  const el = document.getElementById('scanStatus');
+  el.textContent = msg;
+  el.className = 'scan-status ' + type;
+}
+
+function now() {
+  return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function toast(msg, type = 'success') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type === 'error' ? 'error' : '');
+  t.innerHTML = (type === 'error' ? '❌ ' : '✅ ') + msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 3000);
+}
+</script>
+</body>
+</html>
