@@ -512,7 +512,11 @@ async function loadSesi(url) {
 // ============================================================
 // BACKEND CALL
 // ============================================================
-aasync function callBackend(action, params = {}, url = null) {
+// ============================================================
+// BACKEND CALL
+// ============================================================
+async function callBackend(action, params = {}, url = null) {
+
   const endpoint = url || S.appsScriptUrl;
 
   if (!endpoint) {
@@ -520,6 +524,7 @@ aasync function callBackend(action, params = {}, url = null) {
   }
 
   try {
+
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -528,9 +533,12 @@ aasync function callBackend(action, params = {}, url = null) {
       body: JSON.stringify({
         action,
         params
-      }),
-      muteHttpExceptions: true
+      })
     });
+
+    if (!response.ok) {
+      throw new Error('HTTP Error ' + response.status);
+    }
 
     const text = await response.text();
 
@@ -540,14 +548,12 @@ aasync function callBackend(action, params = {}, url = null) {
 
     const json = JSON.parse(text);
 
-    if (!json.success) {
-      throw new Error(json.message || 'Server error');
-    }
-
     return json;
 
   } catch(err) {
+
     console.error(err);
+
     throw err;
   }
 }
@@ -556,58 +562,97 @@ aasync function callBackend(action, params = {}, url = null) {
 // CAMERA SCANNER
 // ============================================================
 async function startScanner() {
+
   const tanggal = document.getElementById('tanggal').value;
   const sesiId  = document.getElementById('sesiSelect').value;
 
-  if (!tanggal) { toast('Isi tanggal terlebih dahulu', 'error'); return; }
-  if (!sesiId)  { toast('Pilih sesi terlebih dahulu', 'error'); return; }
-  if (!S.appsScriptUrl) { toast('Isi URL Apps Script dan klik Simpan & Muat Sesi', 'error'); return; }
+  if (!tanggal) {
+    toast('Isi tanggal terlebih dahulu', 'error');
+    return;
+  }
 
-  // Enumerate cameras
+  if (!sesiId) {
+    toast('Pilih sesi terlebih dahulu', 'error');
+    return;
+  }
+
+  if (!S.appsScriptUrl) {
+    toast('Isi URL Apps Script terlebih dahulu', 'error');
+    return;
+  }
+
   try {
+
     const devices = await navigator.mediaDevices.enumerateDevices();
-    S.cameras = devices.filter(d => d.kind === 'videoinput');
+
+    S.cameras = devices.filter(
+      d => d.kind === 'videoinput'
+    );
 
     if (S.cameras.length > 1) {
+
       const sel = document.getElementById('cameraSelect');
+
       sel.style.display = 'block';
-      sel.innerHTML = S.cameras.map((c, i) =>
-        `<option value="${i}">${c.label || 'Kamera ' + (i+1)}</option>`
-      ).join('');
-      // Default to back camera
-      const backIdx = S.cameras.findIndex(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('belakang') || c.label.toLowerCase().includes('rear') || c.label.toLowerCase().includes('environment'));
-      if (backIdx >= 0) { sel.value = backIdx; S.currentCamera = backIdx; }
+
+      sel.innerHTML = S.cameras.map((cam, i) => `
+        <option value="${i}">
+          ${cam.label || 'Kamera ' + (i + 1)}
+        </option>
+      `).join('');
+
     }
 
     await openCamera();
 
-  } catch(e) {
+  } catch(err) {
+
+    console.error(err);
+
     document.getElementById('permissionError').style.display = 'block';
-    setStatus('❌ Akses kamera ditolak: ' + e.message, 'error');
-    toast('Izin kamera ditolak. Lihat instruksi di atas.', 'error');
+
+    setStatus('❌ Kamera tidak diizinkan', 'error');
+
+    toast(err.message, 'error');
   }
 }
 
 async function openCamera() {
 
-  const constraints = {
-    audio: false,
-    video: {
-      facingMode: {
-        ideal: 'environment'
+  if (S.stream) {
+    S.stream.getTracks().forEach(track => track.stop());
+  }
+
+  let constraints;
+
+  if (S.cameras.length > 0) {
+
+    constraints = {
+      video: {
+        deviceId: {
+          exact: S.cameras[S.currentCamera].deviceId
+        }
       },
-      width: {
-        ideal: 1280
+      audio: false
+    };
+
+  } else {
+
+    constraints = {
+      video: {
+        facingMode: {
+          ideal: 'environment'
+        }
       },
-      height: {
-        ideal: 720
-      }
-    }
-  };
+      audio: false
+    };
+  }
 
   try {
 
-    S.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    S.stream = await navigator.mediaDevices.getUserMedia(
+      constraints
+    );
 
     const video = document.getElementById('video');
 
@@ -618,12 +663,19 @@ async function openCamera() {
     await video.play();
 
     document.getElementById('videoWrapper').style.display = 'block';
+
     document.getElementById('startBtn').style.display = 'none';
+
     document.getElementById('stopBtn').style.display = 'block';
+
+    document.getElementById('permissionError').style.display = 'none';
 
     S.scanning = true;
 
-    setStatus('🔍 Scanner aktif...', 'scanning');
+    setStatus(
+      '🔍 Scanner aktif...',
+      'scanning'
+    );
 
     requestAnimationFrame(scanLoop);
 
@@ -638,31 +690,41 @@ async function openCamera() {
     toast(err.message, 'error');
   }
 }
+
 async function switchCamera() {
-  S.currentCamera = parseInt(document.getElementById('cameraSelect').value);
-  if (S.stream) {
-    S.stream.getTracks().forEach(t => t.stop());
-    await openCamera();
-  }
+
+  S.currentCamera = parseInt(
+    document.getElementById('cameraSelect').value
+  );
+
+  await openCamera();
 }
 
 function stopScanner() {
+
   S.scanning = false;
-  if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+
+  if (S.stream) {
+    S.stream.getTracks().forEach(track => track.stop());
+    S.stream = null;
+  }
+
   document.getElementById('videoWrapper').style.display = 'none';
+
   document.getElementById('startBtn').style.display = 'block';
+
   document.getElementById('stopBtn').style.display = 'none';
+
   document.getElementById('cameraSelect').style.display = 'none';
+
   setStatus('⏸️ Scanner dihentikan', 'idle');
 }
 
 // ============================================================
 // SCAN LOOP
 // ============================================================
-function scanLoop() {
-  if (!S.scanning) return;
+const scanCanvas = document.createElement('canvas');
 
-  const scanCanvas = document.createElement('canvas');
 const scanCtx = scanCanvas.getContext('2d', {
   willReadFrequently: true
 });
@@ -679,6 +741,7 @@ function scanLoop() {
   ) {
 
     scanCanvas.width = video.videoWidth;
+
     scanCanvas.height = video.videoHeight;
 
     scanCtx.drawImage(
@@ -705,7 +768,11 @@ function scanLoop() {
       }
     );
 
-    if (code && code.data && !S.cooldown) {
+    if (
+      code &&
+      code.data &&
+      !S.cooldown
+    ) {
 
       navigator.vibrate?.(100);
 
@@ -717,13 +784,15 @@ function scanLoop() {
 }
 
 async function handleScan(barcode) {
-  async function handleScan(barcode) {
 
   if (S.cooldown) return;
 
   S.cooldown = true;
 
-  setStatus('⏳ Memproses QR...', 'scanning');
+  setStatus(
+    '⏳ Memproses QR...',
+    'scanning'
+  );
 
   try {
 
@@ -733,7 +802,10 @@ async function handleScan(barcode) {
 
     console.error(err);
 
-    setStatus('❌ ' + err.message, 'error');
+    setStatus(
+      '❌ ' + err.message,
+      'error'
+    );
   }
 
   setTimeout(() => {
@@ -741,6 +813,7 @@ async function handleScan(barcode) {
     S.cooldown = false;
 
     if (S.scanning) {
+
       setStatus(
         '🔍 Arahkan QR ke kamera',
         'scanning'
@@ -749,6 +822,7 @@ async function handleScan(barcode) {
 
   }, 3000);
 }
+
 async function processBarcode(barcode) {
 
   const tanggal = document.getElementById('tanggal').value;
@@ -793,18 +867,23 @@ async function processBarcode(barcode) {
 
       toast(`${res.nama} berhasil diabsen`);
 
+    } else {
+
+      throw new Error(
+        res.message || 'QR tidak valid'
+      );
     }
 
   } catch(err) {
 
-    if (err.message.includes('sudah absen')) {
+    if (
+      err.message.includes('sudah absen')
+    ) {
 
       setStatus(
         '⚠️ Sudah absen',
         'duplicate'
       );
-
-      toast(err.message, 'error');
 
     } else {
 
@@ -812,15 +891,22 @@ async function processBarcode(barcode) {
         '❌ ' + err.message,
         'error'
       );
-
-      toast(err.message, 'error');
     }
+
+    toast(err.message, 'error');
   }
 }
+
 async function submitManual() {
-  const val = document.getElementById('manualInput').value.trim();
+
+  const val = document.getElementById('manualInput')
+    .value
+    .trim();
+
   if (!val) return;
+
   document.getElementById('manualInput').value = '';
+
   await processBarcode(val);
 }
 
